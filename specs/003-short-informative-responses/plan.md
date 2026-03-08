@@ -56,9 +56,11 @@ tests/
 │   ├── test_config.py   # Tests enforcing no-credential rules
 │   ├── test_persona.py  # Tests LLM constraint parsing (mocked)
 │   ├── test_db.py       # Tests SQLAlchemy logic (in-memory sqlite)
-│   ├── test_onboarding.py # Tests User Onboarding flow (spec 001, US3)
-│   ├── test_handlers.py # Tests private/group chat routing logic (spec 002, US1 & US2)
-│   └── test_responses.py # Tests prompt updates for short responses (spec 003, US1)
+    │   ├── test_onboarding.py # Tests User Onboarding flow (spec 001, US3)
+    │   ├── test_handlers.py # Tests private/group chat routing logic (spec 002, US1 & US2)
+    │   └── test_responses.py # Tests prompt updates for short responses (spec 003, US1)
+    └── integration/
+        └── test_e2e.py      # End-to-end CLI execution test ensuring event loop isolation
 ```
 
 **Structure Decision**: A dedicated `tests/` folder is scaffolded at the root directory alongside `src/` to house unit and integration tests. This folder maps directly to all logic established in specs 001, 002, and 003.

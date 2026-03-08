@@ -6,7 +6,7 @@ from nova.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-async def start_polling() -> None:
+def start_polling() -> None:
     """Initialize and start the Telegram bot polling."""
     settings = get_settings()
 

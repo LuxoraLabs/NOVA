@@ -1,5 +1,4 @@
 import typer
-import asyncio
 from typing import Optional
 from nova.utils.logging import setup_unified_logging, get_logger
 from nova.utils.config import get_settings
@@ -24,14 +23,14 @@ def run(
     init_db()
 
     # Run bot
-    asyncio.run(start_bot())
+    start_bot()
 
 
-async def start_bot() -> None:
-    """Run the async bot polling."""
+def start_bot() -> None:
+    """Run the bot polling."""
     from nova.bot.platform import start_polling
 
-    await start_polling()
+    start_polling()
 
 
 if __name__ == "__main__":

@@ -88,6 +88,8 @@
 
 - [x] T018 Code cleanup and formatting using `black` and `ruff`.
 - [x] T019 Run full `pytest` suite ensuring 100% pass rate.
+- [x] T020 Fix `RuntimeError: This event loop is already running` in CLI by switching `start_polling` to synchronous execution.
+- [x] T021 Add `tests/integration/test_e2e.py` to assert the `nova` CLI can run completely end-to-end without asyncio loop collisions.
 
 ---
 
