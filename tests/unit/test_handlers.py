@@ -1,6 +1,6 @@
 import pytest
 from unittest import mock
-from nova.bot.handlers import handle_text_message
+from nova.bot.handlers import handle_text_message, handle_nova_command
 from telegram import Update, User as TelegramUser, Message, Chat
 from telegram.ext import ContextTypes
 
@@ -70,10 +70,11 @@ async def test_handle_text_group_message_no_mention(mock_update, mock_context):
 
 
 @pytest.mark.asyncio
-async def test_handle_text_group_message_with_mention(mock_update, mock_context):
-    """Group messages with mention should strip mention and process."""
+async def test_handle_nova_command_in_group(mock_update, mock_context):
+    """Group messages with /nova command should be processed."""
     mock_update.effective_chat.type = "group"
-    mock_update.message.text = "Hey @test_bot, how are you?"
+    mock_update.message.text = "/nova how are you?"
+    mock_context.args = ["how", "are", "you?"]
 
     with (
         mock.patch("nova.bot.handlers.get_user_by_telegram_id") as mock_get_user,
@@ -89,27 +90,26 @@ async def test_handle_text_group_message_with_mention(mock_update, mock_context)
         mock_db_user.id = 1
         mock_get_user.return_value = mock_db_user
 
-        await handle_text_message(mock_update, mock_context)
+        await handle_nova_command(mock_update, mock_context)
 
-        # Verify mention was stripped before processing
+        # Verify command args were joined and passed
         mock_save_message.assert_any_call(
-            user_id=1, content="Hey , how are you?", role="user", chat_context="999"
+            user_id=1, content="how are you?", role="user", chat_context="999"
         )
 
-        mock_process.assert_called_once_with(
-            mock_db_user, "Hey , how are you?", mock.ANY
-        )
+        mock_process.assert_called_once_with(mock_db_user, "how are you?", mock.ANY)
         mock_context.bot.send_message.assert_called_once_with(
             chat_id=999, text="I am fine"
         )
 
 
 @pytest.mark.asyncio
-async def test_handle_text_group_topic_mention(mock_update, mock_context):
-    """Group messages in a specific topic should reply to that specific topic."""
+async def test_handle_nova_command_in_topic(mock_update, mock_context):
+    """Group messages in a specific topic using /nova should reply to that topic."""
     mock_update.effective_chat.type = "supergroup"
-    mock_update.message.text = "Hey @test_bot, how are you?"
+    mock_update.message.text = "/nova how are you?"
     mock_update.message.message_thread_id = 42
+    mock_context.args = ["how", "are", "you?"]
 
     with (
         mock.patch("nova.bot.handlers.get_user_by_telegram_id") as mock_get_user,
@@ -125,7 +125,7 @@ async def test_handle_text_group_topic_mention(mock_update, mock_context):
         mock_db_user.id = 1
         mock_get_user.return_value = mock_db_user
 
-        await handle_text_message(mock_update, mock_context)
+        await handle_nova_command(mock_update, mock_context)
 
         mock_context.bot.send_message.assert_called_once_with(
             chat_id=999, message_thread_id=42, text="Topic reply"

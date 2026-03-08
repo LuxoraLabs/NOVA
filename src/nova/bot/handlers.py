@@ -116,55 +116,15 @@ async def cancel_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return ConversationHandler.END
 
 
-async def handle_text_message(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
+async def _process_and_reply(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+    user,
+    chat_id: int,
+    chat_context: str,
 ) -> None:
-    """Handle standard text messages and route to LangGraph."""
-    user = update.effective_user
-    if not user or not update.message:
-        return
-
-    text = update.message.text or update.message.caption
-    if not text:
-        return
-
-    chat_id = update.effective_chat.id
-    is_private = update.effective_chat.type == "private"
-    chat_context = "private" if is_private else str(chat_id)
-
-    logger.debug(
-        f"Received message payload in chat_id: {chat_id}, type: {update.effective_chat.type}, thread_id: {update.message.message_thread_id}"
-    )
-
-    # Group chat explicitly requires bot mention or reply
-    if not is_private:
-        bot_username = context.bot.username
-        mention = f"@{bot_username}".lower()
-
-        is_reply_to_bot = False
-        if (
-            update.message.reply_to_message
-            and update.message.reply_to_message.from_user
-        ):
-            is_reply_to_bot = (
-                update.message.reply_to_message.from_user.id == context.bot.id
-            )
-
-        if mention not in text.lower() and not is_reply_to_bot:
-            return  # Ignore messages not mentioning or replying to the bot
-
-        logger.debug(
-            f"Mention or reply detected in chat_id: {chat_id}, thread_id: {update.message.message_thread_id}"
-        )
-
-        # Strip the mention out so the LLM doesn't read it
-        import re
-
-        text = re.sub(f"(?i)@{bot_username}", "", text).strip()
-        if not text:
-            await update.message.reply_text("Operator, how can I assist you?")
-            return
-
+    """Core logic to process message, invoke LangGraph, and send a reply."""
     db_user = get_user_by_telegram_id(user.id)
     if not db_user:
         await update.message.reply_text(
@@ -216,6 +176,72 @@ async def handle_text_message(
         )
 
 
+async def handle_nova_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle /nova command explicitly."""
+    user = update.effective_user
+    if not user or not update.message:
+        return
+
+    text = " ".join(context.args) if context.args else ""
+    if not text:
+        await update.message.reply_text("Operator, how can I assist you?")
+        return
+
+    chat_id = update.effective_chat.id
+    is_private = update.effective_chat.type == "private"
+    chat_context = "private" if is_private else str(chat_id)
+
+    logger.debug(
+        f"Received /nova command in chat_id: {chat_id}, type: {update.effective_chat.type}, thread_id: {update.message.message_thread_id}"
+    )
+
+    await _process_and_reply(update, context, text, user, chat_id, chat_context)
+
+
+async def handle_text_message(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle standard text messages and route to LangGraph."""
+    user = update.effective_user
+    if not user or not update.message:
+        return
+
+    text = update.message.text or update.message.caption
+    if not text:
+        return
+
+    chat_id = update.effective_chat.id
+    is_private = update.effective_chat.type == "private"
+    chat_context = "private" if is_private else str(chat_id)
+
+    logger.debug(
+        f"Received message payload in chat_id: {chat_id}, type: {update.effective_chat.type}, thread_id: {update.message.message_thread_id}"
+    )
+
+    # Group chat explicitly requires bot command (/nova) or reply to the bot
+    # Mentions are no longer supported
+    if not is_private:
+        is_reply_to_bot = False
+        if (
+            update.message.reply_to_message
+            and update.message.reply_to_message.from_user
+        ):
+            is_reply_to_bot = (
+                update.message.reply_to_message.from_user.id == context.bot.id
+            )
+
+        if not is_reply_to_bot:
+            return  # Ignore messages not replying to the bot
+
+        logger.debug(
+            f"Reply to bot detected in chat_id: {chat_id}, thread_id: {update.message.message_thread_id}"
+        )
+
+    await _process_and_reply(update, context, text, user, chat_id, chat_context)
+
+
 async def handle_non_text_message(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -237,6 +263,9 @@ def register_handlers(app: Application) -> None:
         fallbacks=[CommandHandler("cancel", cancel_onboarding)],
     )
     app.add_handler(onboarding_handler)
+
+    # Command handlers
+    app.add_handler(CommandHandler("nova", handle_nova_command))
 
     # Standard text messages
     app.add_handler(
