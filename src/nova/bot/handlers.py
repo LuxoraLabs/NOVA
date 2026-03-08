@@ -121,10 +121,13 @@ async def handle_text_message(
 ) -> None:
     """Handle standard text messages and route to LangGraph."""
     user = update.effective_user
-    if not user or not update.message or not update.message.text:
+    if not user or not update.message:
         return
 
-    text = update.message.text
+    text = update.message.text or update.message.caption
+    if not text:
+        return
+
     chat_id = update.effective_chat.id
     is_private = update.effective_chat.type == "private"
     chat_context = "private" if is_private else str(chat_id)
@@ -133,19 +136,31 @@ async def handle_text_message(
         f"Received message payload in chat_id: {chat_id}, type: {update.effective_chat.type}, thread_id: {update.message.message_thread_id}"
     )
 
-    # Group chat explicitly requires bot mention
+    # Group chat explicitly requires bot mention or reply
     if not is_private:
         bot_username = context.bot.username
-        mention = f"@{bot_username}"
-        if mention not in text:
-            return  # Ignore messages not mentioning the bot
+        mention = f"@{bot_username}".lower()
+
+        is_reply_to_bot = False
+        if (
+            update.message.reply_to_message
+            and update.message.reply_to_message.from_user
+        ):
+            is_reply_to_bot = (
+                update.message.reply_to_message.from_user.id == context.bot.id
+            )
+
+        if mention not in text.lower() and not is_reply_to_bot:
+            return  # Ignore messages not mentioning or replying to the bot
 
         logger.debug(
-            f"Mention detected in chat_id: {chat_id}, thread_id: {update.message.message_thread_id}"
+            f"Mention or reply detected in chat_id: {chat_id}, thread_id: {update.message.message_thread_id}"
         )
 
         # Strip the mention out so the LLM doesn't read it
-        text = text.replace(mention, "").strip()
+        import re
+
+        text = re.sub(f"(?i)@{bot_username}", "", text).strip()
         if not text:
             await update.message.reply_text("Operator, how can I assist you?")
             return
@@ -225,10 +240,15 @@ def register_handlers(app: Application) -> None:
 
     # Standard text messages
     app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
+        MessageHandler(
+            (filters.TEXT | filters.CAPTION) & ~filters.COMMAND, handle_text_message
+        )
     )
 
     # Non-text messages
     app.add_handler(
-        MessageHandler(~filters.TEXT & ~filters.COMMAND, handle_non_text_message)
+        MessageHandler(
+            ~(filters.TEXT | filters.CAPTION) & ~filters.COMMAND,
+            handle_non_text_message,
+        )
     )

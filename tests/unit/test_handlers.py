@@ -130,3 +130,36 @@ async def test_handle_text_group_topic_mention(mock_update, mock_context):
         mock_context.bot.send_message.assert_called_once_with(
             chat_id=999, message_thread_id=42, text="Topic reply"
         )
+
+
+@pytest.mark.asyncio
+async def test_handle_text_group_message_reply_to_bot(mock_update, mock_context):
+    """Group messages that reply to the bot should be processed even without a mention."""
+    mock_update.effective_chat.type = "group"
+    mock_update.message.text = "Yes, I agree."
+
+    # Mock that this message replies to the bot
+    mock_reply_to = mock.MagicMock()
+    mock_reply_to.from_user.id = 99999  # Bot's ID
+    mock_update.message.reply_to_message = mock_reply_to
+    mock_context.bot.id = 99999
+
+    with (
+        mock.patch("nova.bot.handlers.get_user_by_telegram_id") as mock_get_user,
+        mock.patch("nova.bot.handlers.save_message"),
+        mock.patch("nova.bot.handlers.get_graph_state"),
+        mock.patch(
+            "nova.bot.handlers.process_message", return_value=("I hear you", "[]")
+        ),
+        mock.patch("nova.bot.handlers.update_graph_state"),
+    ):
+
+        mock_db_user = mock.MagicMock()
+        mock_db_user.id = 1
+        mock_get_user.return_value = mock_db_user
+
+        await handle_text_message(mock_update, mock_context)
+
+        mock_context.bot.send_message.assert_called_once_with(
+            chat_id=999, text="I hear you"
+        )

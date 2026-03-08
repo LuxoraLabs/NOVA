@@ -5,7 +5,7 @@ from unittest import mock
 
 
 # The previous conftest.py globally mocked these variables using os.environ[]
-# We need to explicitly clear those specific keys here since clear=True in 
+# We need to explicitly clear those specific keys here since clear=True in
 # mock.patch.dict doesn't guarantee removal of keys already set in the current process
 @pytest.fixture(autouse=True)
 def clean_env():
@@ -14,7 +14,7 @@ def clean_env():
         del os.environ["TELEGRAM_BOT_TOKEN"]
     if "OPENAI_API_KEY" in os.environ:
         del os.environ["OPENAI_API_KEY"]
-        
+
     with mock.patch.dict(os.environ, clear=True):
         yield
 
@@ -22,21 +22,28 @@ def clean_env():
 def test_settings_requires_telegram_bot_token():
     pass
 
+
 def test_settings_requires_telegram_bot_token_real():
-    # Because .env file exists in the directory, pydantic_settings will load it 
+    # Because .env file exists in the directory, pydantic_settings will load it
     # even if we patch os.environ. The only way to truly test validation is to
     # pass empty strings to constructor directly which overrides the env.
     from nova.utils.config import Settings
+
     with pytest.raises(ValidationError) as excinfo:
         Settings(telegram_bot_token="")
-    assert "telegram_bot_token" in str(excinfo.value) or "String should have at least 1 character" in str(excinfo.value)
+    assert "telegram_bot_token" in str(
+        excinfo.value
+    ) or "String should have at least 1 character" in str(excinfo.value)
 
 
 def test_settings_requires_openai_api_key_real():
     from nova.utils.config import Settings
+
     with pytest.raises(ValidationError) as excinfo:
         Settings(openai_api_key="")
-    assert "openai_api_key" in str(excinfo.value) or "String should have at least 1 character" in str(excinfo.value)
+    assert "openai_api_key" in str(
+        excinfo.value
+    ) or "String should have at least 1 character" in str(excinfo.value)
 
 
 def test_settings_successful_initialization():
