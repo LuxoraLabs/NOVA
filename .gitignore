@@ -9,3 +9,6 @@
 .vscode/
 .pytest_cache/
 .pycache/.mypy_cache/
+logs/
+nova.db
+__pycache__/

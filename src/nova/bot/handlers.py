@@ -129,12 +129,20 @@ async def handle_text_message(
     is_private = update.effective_chat.type == "private"
     chat_context = "private" if is_private else str(chat_id)
 
+    logger.debug(
+        f"Received message payload in chat_id: {chat_id}, type: {update.effective_chat.type}, thread_id: {update.message.message_thread_id}"
+    )
+
     # Group chat explicitly requires bot mention
     if not is_private:
         bot_username = context.bot.username
         mention = f"@{bot_username}"
         if mention not in text:
             return  # Ignore messages not mentioning the bot
+
+        logger.debug(
+            f"Mention detected in chat_id: {chat_id}, thread_id: {update.message.message_thread_id}"
+        )
 
         # Strip the mention out so the LLM doesn't read it
         text = text.replace(mention, "").strip()
@@ -177,7 +185,14 @@ async def handle_text_message(
         )
 
         # T020 routing directly to chat_id
-        await context.bot.send_message(chat_id=chat_id, text=response)
+        send_kwargs = {"chat_id": chat_id, "text": response}
+        if update.message.message_thread_id:
+            send_kwargs["message_thread_id"] = update.message.message_thread_id
+
+        logger.debug(
+            f"Routing response to chat_id: {chat_id}, thread_id: {update.message.message_thread_id}"
+        )
+        await context.bot.send_message(**send_kwargs)
     except Exception as e:
         logger.error(f"Error processing message: {e}")
         await context.bot.send_message(

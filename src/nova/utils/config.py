@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
@@ -7,8 +8,8 @@ load_dotenv()
 class Settings(BaseSettings):
     """Application configuration"""
 
-    telegram_bot_token: str
-    openai_api_key: str
+    telegram_bot_token: str = Field(min_length=1)
+    openai_api_key: str = Field(min_length=1)
     log_level: str = "INFO"
     db_path: str = "nova.db"
 
