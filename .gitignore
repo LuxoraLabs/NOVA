@@ -1,2 +1,16 @@
 .env
 .env.local
+
+.DS_Store
+
+.specify/
+.cursor/
+.venv/
+.vscode/
+.pytest_cache/
+.pycache/.mypy_cache/
+.mypy_cache/
+//logs/
+nova.db
+__pycache__/
+credentials.json
