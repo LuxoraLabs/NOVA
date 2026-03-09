@@ -1,6 +1,25 @@
+import json
+import os
+import tempfile
+
 import pytest
 from unittest import mock
-from nova.services.sheets import GoogleSheetsService
+from nova.services.sheets import GoogleSheetsService, _load_credentials
+
+
+def test_load_credentials_from_file_path():
+    """Credentials can be loaded from a file path (fixes UTF-8 decode error)."""
+    creds = {"type": "service_account", "project_id": "test", "private_key_id": "x"}
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False
+    ) as f:
+        json.dump(creds, f)
+        path = f.name
+    try:
+        result = _load_credentials(path)
+        assert result == creds
+    finally:
+        os.unlink(path)
 
 
 @pytest.fixture

@@ -7,7 +7,10 @@ graph_app = build_graph()
 
 
 def process_message(
-    user: User, text: str, db_state: DBGraphState | None
+    user: User,
+    text: str,
+    db_state: DBGraphState | None,
+    scenario: str | None = None,
 ) -> tuple[str, str]:
     """Process an incoming message and return the response and updated history."""
     history_str = db_state.chat_history if db_state else "[]"
@@ -16,9 +19,10 @@ def process_message(
 
     initial_state = AgentState(
         user=user,
-        current_message=text,
+        current_message=text or "Hi",
         chat_history=load_history(history_str),
-        messages=[HumanMessage(content=text)],
+        messages=[HumanMessage(content=text or "Hi")],
+        scenario=scenario,
     )
 
     result = graph_app.invoke(initial_state)

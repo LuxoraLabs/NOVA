@@ -23,6 +23,7 @@ def create_user(
     weight: Optional[float] = None,
     height: Optional[float] = None,
     google_sheet_url: Optional[str] = None,
+    is_setup_completed: bool = False,
 ) -> User:
     """Create a new user and return the model."""
     with SessionLocal() as session:
@@ -32,11 +33,71 @@ def create_user(
             weight=weight,
             height=height,
             google_sheet_url=google_sheet_url,
+            is_setup_completed=is_setup_completed,
         )
         session.add(new_user)
         session.commit()
         session.refresh(new_user)
         return new_user
+
+
+REQUIRED_PROFILE_FIELDS = ["name", "weight", "height", "google_sheet_url"]
+
+
+def update_user_profile_partial(user_id: int, **kwargs: object) -> Optional[User]:
+    """Update only provided profile fields for the user."""
+    allowed = {"name", "weight", "height", "google_sheet_url"}
+    to_update = {k: v for k, v in kwargs.items() if k in allowed and v is not None}
+    if not to_update:
+        return get_user_by_id(user_id)
+
+    with SessionLocal() as session:
+        db_user = session.query(User).filter(User.id == user_id).one_or_none()
+        if not db_user:
+            return None
+        for k, v in to_update.items():
+            setattr(db_user, k, v)
+        session.commit()
+    recompute_setup_completed(user_id)
+    return get_user_by_id(user_id)
+
+
+def get_user_by_id(user_id: int) -> Optional[User]:
+    """Fetch a user by their internal ID."""
+    with SessionLocal() as session:
+        return session.query(User).filter(User.id == user_id).one_or_none()
+
+
+def get_missing_profile_fields(user_id: int) -> list[str]:
+    """Return list of required field names that are null/empty."""
+    user = get_user_by_id(user_id)
+    if not user:
+        return list(REQUIRED_PROFILE_FIELDS)
+    missing: list[str] = []
+    if not user.name or not str(user.name).strip():
+        missing.append("name")
+    if user.weight is None:
+        missing.append("weight")
+    if user.height is None:
+        missing.append("height")
+    if not user.google_sheet_url or not str(user.google_sheet_url).strip():
+        missing.append("google_sheet_url")
+    return missing
+
+
+def recompute_setup_completed(user_id: int) -> bool:
+    """Set is_setup_completed based on current field values; return new value."""
+    missing = get_missing_profile_fields(user_id)
+    new_value = len(missing) == 0
+
+    with SessionLocal() as session:
+        db_user = session.query(User).filter(User.id == user_id).one_or_none()
+        if not db_user:
+            return False
+        db_user.is_setup_completed = new_value
+        session.commit()
+        session.refresh(db_user)
+        return db_user.is_setup_completed
 
 
 def update_user(user: User) -> User:
@@ -47,6 +108,7 @@ def update_user(user: User) -> User:
         db_user.weight = user.weight
         db_user.height = user.height
         db_user.google_sheet_url = user.google_sheet_url
+        db_user.is_setup_completed = user.is_setup_completed
         session.commit()
         session.refresh(db_user)
         return db_user

@@ -38,11 +38,11 @@ def mock_context():
 async def test_handle_text_private_message(mock_update, mock_context):
     """Private messages should always be processed."""
     with (
-        mock.patch("nova.bot.handlers.get_user_by_telegram_id") as mock_get_user,
-        mock.patch("nova.bot.handlers.save_message"),
-        mock.patch("nova.bot.handlers.get_graph_state"),
-        mock.patch("nova.bot.handlers.process_message", return_value=("Hi", "[]")),
-        mock.patch("nova.bot.handlers.update_graph_state"),
+        mock.patch("nova.bot.handlers.core.get_user_by_telegram_id") as mock_get_user,
+        mock.patch("nova.bot.handlers.core.save_message"),
+        mock.patch("nova.bot.handlers.core.get_graph_state"),
+        mock.patch("nova.bot.handlers.core.process_message", return_value=("Hi", "[]")),
+        mock.patch("nova.bot.handlers.core.update_graph_state"),
     ):
         mock_db_user = mock.MagicMock()
         mock_db_user.id = 1
@@ -51,7 +51,9 @@ async def test_handle_text_private_message(mock_update, mock_context):
         await handle_text_message(mock_update, mock_context)
 
         # Verify it went through and sent a reply
-        mock_context.bot.send_message.assert_called_once_with(chat_id=999, text="Hi")
+        mock_context.bot.send_message.assert_called_once_with(
+            chat_id=999, text="Hi", parse_mode="HTML"
+        )
 
 
 @pytest.mark.asyncio
@@ -60,10 +62,10 @@ async def test_handle_text_group_message_no_mention(mock_update, mock_context):
     mock_update.effective_chat.type = "group"
     mock_update.message.text = "Hello everyone"
 
-    with mock.patch("nova.bot.handlers.get_user_by_telegram_id") as mock_get_user:
+    with mock.patch("nova.bot.handlers.core.get_user_by_telegram_id") as mock_get_user:
         await handle_text_message(mock_update, mock_context)
 
-        # User shouldn't even be looked up
+        # User shouldn't even be looked up (group msg not replying to bot)
         mock_get_user.assert_not_called()
         mock_context.bot.send_message.assert_not_called()
 
@@ -76,17 +78,21 @@ async def test_handle_nova_command_in_group(mock_update, mock_context):
     mock_context.args = ["how", "are", "you?"]
 
     with (
-        mock.patch("nova.bot.handlers.get_user_by_telegram_id") as mock_get_user,
-        mock.patch("nova.bot.handlers.save_message") as mock_save_message,
-        mock.patch("nova.bot.handlers.get_graph_state"),
+        mock.patch("nova.bot.handlers.nova.get_user_by_telegram_id") as mock_get_user,
         mock.patch(
-            "nova.bot.handlers.process_message", return_value=("I am fine", "[]")
+            "nova.bot.handlers.core.get_user_by_telegram_id"
+        ) as mock_get_user_core,
+        mock.patch("nova.bot.handlers.core.save_message") as mock_save_message,
+        mock.patch("nova.bot.handlers.core.get_graph_state"),
+        mock.patch(
+            "nova.bot.handlers.core.process_message", return_value=("I am fine", "[]")
         ) as mock_process,
-        mock.patch("nova.bot.handlers.update_graph_state"),
+        mock.patch("nova.bot.handlers.core.update_graph_state"),
     ):
         mock_db_user = mock.MagicMock()
         mock_db_user.id = 1
         mock_get_user.return_value = mock_db_user
+        mock_get_user_core.return_value = mock_db_user
 
         await handle_nova_command(mock_update, mock_context)
 
@@ -95,9 +101,11 @@ async def test_handle_nova_command_in_group(mock_update, mock_context):
             user_id=1, content="how are you?", role="user", chat_context="999"
         )
 
-        mock_process.assert_called_once_with(mock_db_user, "how are you?", mock.ANY)
+        mock_process.assert_called_once_with(
+            mock_db_user, "how are you?", mock.ANY, scenario=None
+        )
         mock_context.bot.send_message.assert_called_once_with(
-            chat_id=999, text="I am fine"
+            chat_id=999, text="I am fine", parse_mode="HTML"
         )
 
 
@@ -105,169 +113,79 @@ async def test_handle_nova_command_in_group(mock_update, mock_context):
 async def test_handle_nova_command_in_topic(mock_update, mock_context):
     """Group messages in a specific topic using /nova should reply to that topic."""
     mock_update.effective_chat.type = "supergroup"
+    mock_update.effective_chat.id = -1003887686998  # Real supergroup IDs are negative
     mock_update.message.text = "/nova how are you?"
     mock_update.message.message_thread_id = 42
     mock_context.args = ["how", "are", "you?"]
 
     with (
-        mock.patch("nova.bot.handlers.get_user_by_telegram_id") as mock_get_user,
-        mock.patch("nova.bot.handlers.save_message"),
-        mock.patch("nova.bot.handlers.get_graph_state"),
+        mock.patch("nova.bot.handlers.nova.get_user_by_telegram_id") as mock_get_user,
         mock.patch(
-            "nova.bot.handlers.process_message", return_value=("Topic reply", "[]")
+            "nova.bot.handlers.core.get_user_by_telegram_id"
+        ) as mock_get_user_core,
+        mock.patch("nova.bot.handlers.core.save_message"),
+        mock.patch("nova.bot.handlers.core.get_graph_state"),
+        mock.patch(
+            "nova.bot.handlers.core.process_message", return_value=("Topic reply", "[]")
         ),
-        mock.patch("nova.bot.handlers.update_graph_state"),
+        mock.patch("nova.bot.handlers.core.update_graph_state"),
     ):
         mock_db_user = mock.MagicMock()
         mock_db_user.id = 1
         mock_get_user.return_value = mock_db_user
+        mock_get_user_core.return_value = mock_db_user
 
         await handle_nova_command(mock_update, mock_context)
 
         mock_context.bot.send_message.assert_called_once_with(
-            chat_id=999, message_thread_id=42, text="Topic reply"
+            chat_id=-1003887686998,
+            message_thread_id=42,
+            text="Topic reply",
+            parse_mode="HTML",
         )
 
 
 @pytest.mark.asyncio
-async def test_handle_text_group_message_reply_to_bot(mock_update, mock_context):
-    """Group messages that reply to the bot should be processed even without a mention."""
+async def test_handle_text_group_message_ignored(mock_update, mock_context):
+    """Group/channel direct messages are ignored; use /nova instead."""
     mock_update.effective_chat.type = "group"
     mock_update.message.text = "Yes, I agree."
 
-    # Mock that this message replies to the bot
-    mock_reply_to = mock.MagicMock()
-    mock_reply_to.from_user.id = 99999  # Bot's ID
-    mock_update.message.reply_to_message = mock_reply_to
-    mock_context.bot.id = 99999
-
-    with (
-        mock.patch("nova.bot.handlers.get_user_by_telegram_id") as mock_get_user,
-        mock.patch("nova.bot.handlers.save_message"),
-        mock.patch("nova.bot.handlers.get_graph_state"),
-        mock.patch(
-            "nova.bot.handlers.process_message", return_value=("I hear you", "[]")
-        ),
-        mock.patch("nova.bot.handlers.update_graph_state"),
-    ):
-        mock_db_user = mock.MagicMock()
-        mock_db_user.id = 1
-        mock_get_user.return_value = mock_db_user
-
+    with mock.patch("nova.bot.handlers.core.process_and_reply") as mock_process:
         await handle_text_message(mock_update, mock_context)
 
-        mock_context.bot.send_message.assert_called_once_with(
-            chat_id=999, text="I hear you"
-        )
+        mock_process.assert_not_called()
+        mock_context.bot.send_message.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_handle_nova_command_in_group_unregistered(mock_update, mock_context):
-    """Unregistered users using /nova in a group should be directed to DM."""
+    """Unregistered users using /nova in a group: LLM generates group reply and DM."""
     mock_update.effective_chat.type = "group"
     mock_update.message.text = "/nova hello"
+    mock_update.effective_chat.id = 999
     mock_context.args = ["hello"]
     mock_update.effective_user.name = "@TestUser"
+    mock_update.effective_user.id = 12345
 
     with (
-        mock.patch("nova.bot.handlers.get_user_by_telegram_id", return_value=None),
-        mock.patch("nova.bot.handlers.process_message") as mock_process,
+        mock.patch("nova.bot.handlers.nova.get_user_by_telegram_id", return_value=None),
+        mock.patch("nova.bot.handlers.nova.create_user") as mock_create,
+        mock.patch("nova.bot.handlers.nova.process_and_reply", new=mock.AsyncMock()) as mock_process,
     ):
+        mock_db_user = mock.MagicMock()
+        mock_db_user.id = 1
+        mock_create.return_value = mock_db_user
         await handle_nova_command(mock_update, mock_context)
 
-        mock_process.assert_not_called()
-        mock_update.message.reply_text.assert_called_once()
-        args, kwargs = mock_update.message.reply_text.call_args
-        assert (
-            "direct message" in args[0].lower()
-            or "dm" in args[0].lower()
-            or "private" in args[0].lower()
-        )
+        mock_create.assert_called_once()
+        assert mock_process.call_count == 2
+        first_scenario = mock_process.call_args_list[0][1].get("scenario") or ""
+        second_chat_id = mock_process.call_args_list[1][0][4]
+        assert "group" in first_scenario.lower() or "profile" in first_scenario.lower()
+        assert second_chat_id == 12345
 
 
-@pytest.mark.asyncio
-async def test_handle_height_asks_for_sheet(mock_update, mock_context):
-    """Providing height should now ask for Google Sheet URL."""
-    from nova.bot.handlers import handle_height, SHEET_URL
-
-    mock_update.message.text = "180.5"
-    mock_context.user_data = {"name": "Test", "weight": 80.0}
-
-    result = await handle_height(mock_update, mock_context)
-
-    assert result == SHEET_URL
-    mock_update.message.reply_text.assert_called_once()
-    assert "Data Vault" in mock_update.message.reply_text.call_args[0][0]
-    assert "blank spreadsheet" in mock_update.message.reply_text.call_args[0][0]
-
-
-@pytest.mark.asyncio
-async def test_handle_height_sheet_prompt_includes_service_account_email(
-    mock_update, mock_context
-):
-    """When google_service_account_email is configured, prompt includes it and Editor instruction."""
-    from nova.bot.handlers import handle_height, SHEET_URL
-
-    mock_update.message.text = "180"
-    mock_context.user_data = {"name": "Test", "weight": 80.0}
-    service_email = "nova-bot@my-project.iam.gserviceaccount.com"
-
-    with mock.patch("nova.bot.handlers.get_settings") as mock_get_settings:
-        mock_settings = mock.MagicMock()
-        mock_settings.google_service_account_email = service_email
-        mock_get_settings.return_value = mock_settings
-
-        result = await handle_height(mock_update, mock_context)
-
-    assert result == SHEET_URL
-    reply = mock_update.message.reply_text.call_args[0][0]
-    assert service_email in reply
-    assert "Editor" in reply
-
-
-@pytest.mark.asyncio
-async def test_handle_height_sheet_prompt_fallback_when_email_missing(
-    mock_update, mock_context
-):
-    """When google_service_account_email is not configured, prompt uses generic instructions."""
-    from nova.bot.handlers import handle_height, SHEET_URL
-
-    mock_update.message.text = "180"
-    mock_context.user_data = {"name": "Test", "weight": 80.0}
-
-    with mock.patch("nova.bot.handlers.get_settings") as mock_get_settings:
-        mock_settings = mock.MagicMock()
-        mock_settings.google_service_account_email = None
-        mock_get_settings.return_value = mock_settings
-
-        result = await handle_height(mock_update, mock_context)
-
-    assert result == SHEET_URL
-    reply = mock_update.message.reply_text.call_args[0][0]
-    assert "Data Vault" in reply
-    assert "share" in reply.lower() or "Share" in reply
-    assert "Editor" in reply
-
-
-@pytest.mark.asyncio
-async def test_handle_sheet_url_success(mock_update, mock_context):
-    """Providing a sheet URL finishes registration."""
-    from nova.bot.handlers import handle_sheet_url
-    from telegram.ext import ConversationHandler
-
-    mock_update.message.text = "https://docs.google.com/spreadsheets/d/12345/edit"
-    mock_context.user_data = {"name": "Test", "weight": 80.0, "height": 180.5}
-
-    with mock.patch("nova.bot.handlers.create_user") as mock_create_user:
-        result = await handle_sheet_url(mock_update, mock_context)
-
-        assert result == ConversationHandler.END
-        mock_create_user.assert_called_once_with(
-            telegram_id=mock_update.effective_user.id,
-            name="Test",
-            weight=80.0,
-            height=180.5,
-            google_sheet_url="https://docs.google.com/spreadsheets/d/12345/edit",
-        )
-        mock_update.message.reply_text.assert_called_once()
-        assert "Registration complete" in mock_update.message.reply_text.call_args[0][0]
+# Manual handlers (handle_height, handle_sheet_url, etc.) removed—all profile setup
+# is LLM-driven. Sheet instructions and service account email are tested in
+# test_responses.py::test_invoke_llm_setup_mode_includes_sheet_instructions

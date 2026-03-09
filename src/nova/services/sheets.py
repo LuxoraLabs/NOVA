@@ -5,11 +5,36 @@ Google Sheets API Service
 import base64
 import json
 import logging
+from pathlib import Path
 
 import gspread
 from google.oauth2.service_account import Credentials
 
 logger = logging.getLogger(__name__)
+
+
+def _load_credentials(credentials_json: str) -> dict:
+    """Load credentials from file path, JSON string, or base64."""
+    # File path: exists and (not JSON object, not valid base64 of JSON)
+    path = Path(credentials_json).expanduser()
+    if path.exists() and path.is_file():
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+
+    # Inline JSON
+    try:
+        return json.loads(credentials_json)
+    except json.JSONDecodeError:
+        pass
+
+    # Base64-encoded JSON
+    try:
+        decoded = base64.b64decode(credentials_json).decode("utf-8")
+        return json.loads(decoded)
+    except (ValueError, json.JSONDecodeError):
+        raise ValueError(
+            "Google credentials must be: file path to JSON, inline JSON, or base64-encoded JSON"
+        ) from None
 
 
 class GoogleSheetsService:
@@ -30,15 +55,7 @@ class GoogleSheetsService:
                 "https://www.googleapis.com/auth/spreadsheets",
                 "https://www.googleapis.com/auth/drive",
             ]
-
-            # Check if it's base64 encoded or a valid JSON string
-            try:
-                creds_data = json.loads(self.credentials_json)
-            except json.JSONDecodeError:
-                # Try decoding base64
-                decoded = base64.b64decode(self.credentials_json).decode("utf-8")
-                creds_data = json.loads(decoded)
-
+            creds_data = _load_credentials(self.credentials_json)
             creds = Credentials.from_service_account_info(creds_data, scopes=scopes)
             self.client = gspread.authorize(creds)
             logger.info("Successfully authenticated with Google Sheets API.")

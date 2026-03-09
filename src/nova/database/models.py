@@ -26,6 +26,10 @@ class User(Base):
     height: Mapped[float | None] = mapped_column(Float, nullable=True)
     google_sheet_url: Mapped[str | None] = mapped_column(String, nullable=True)
     google_sheet_credentials: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_setup_completed: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )

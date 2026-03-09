@@ -16,6 +16,7 @@ class AgentState(BaseModel):
     chat_history: List[BaseMessage] = Field(default_factory=list)
     messages: Annotated[List[BaseMessage], add_messages] = Field(default_factory=list)
     response: str = ""
+    scenario: str | None = None
 
     model_config = {"arbitrary_types_allowed": True}
 
