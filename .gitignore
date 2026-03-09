@@ -10,6 +10,7 @@
 .pytest_cache/
 .pycache/.mypy_cache/
 .mypy_cache/
+.ruff_cache/
 logs/
 nova.db
 __pycache__/
