@@ -10,7 +10,7 @@
 .pytest_cache/
 .pycache/.mypy_cache/
 .mypy_cache/
-//logs/
+logs/
 nova.db
 __pycache__/
 credentials.json
