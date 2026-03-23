@@ -1,2 +1,11 @@
 .env
 .env.local
+
+.DS_Store
+
+.specify/
+.cursor/
+.venv/
+.vscode/
+.pytest_cache/
+.pycache/.mypy_cache/
